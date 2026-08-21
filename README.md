@@ -104,7 +104,7 @@ Before a new draft is allowed, a ticket must have a `draft_allowed` triage asses
 
 After the draft writer proposes a reply, a separate grounding reviewer receives that reply and the exact approved source packet. It returns `grounded` only when the reply stays within those sources. Otherwise it returns `needs_human_review`; ResolveAI records the outcome, blocks the workflow, and does **not** create a draft that could be approved accidentally. As with triage, invalid or unavailable local-model output fails closed to human review.
 
-## Model routing and OpenRouter
+## Model routing, Gemini, and OpenRouter fallback
 
 The default configuration remains completely local:
 
@@ -113,19 +113,22 @@ The default configuration remains completely local:
 - Grounding reviewer: Ollama `qwen3:4b`
 - Embeddings: Ollama `embeddinggemma`
 
-To use OpenRouter for **only the draft writer**, add these lines to your untracked `.env` file and rebuild the API container:
+For the recommended hosted configuration, Gemini is the primary provider for triage, draft writing, and grounding review. OpenRouter remains an independent fallback if Gemini is unavailable or rate-limited:
 
 ```bash
-RESOLVEAI_DRAFT_PROVIDER=openrouter
+RESOLVEAI_DRAFT_PROVIDER=gemini
+RESOLVEAI_AGENT_PROVIDER=gemini
+RESOLVEAI_GEMINI_API_KEY=your_gemini_key_here
+RESOLVEAI_GEMINI_MODEL=gemini-3.5-flash
 RESOLVEAI_OPENROUTER_API_KEY=your_openrouter_key_here
-RESOLVEAI_OPENROUTER_DRAFT_MODEL=openrouter/free
+RESOLVEAI_OPENROUTER_DRAFT_MODEL=openai/gpt-oss-20b:free
 ```
 
-The key is never committed: `.env` is ignored by Git and the API reads it only at runtime. When OpenRouter is selected, the draft writer sends its system instruction, the customer ticket fields, and the approved source packet to OpenRouter. Do not enable it for customer data unless that external-processing choice is appropriate for your organization. `openrouter/free` selects a currently available free model dynamically; ResolveAI records the model that actually answered in each coordinator run. For repeatable comparisons later, set this value to a currently available specific model. If the key is absent or the provider rate-limits the request, ResolveAI reports an error rather than silently switching models. You can return to a fully local writer by setting `RESOLVEAI_DRAFT_PROVIDER=ollama`.
+The keys are never committed: `.env` is ignored by Git and the API reads them only at runtime. Triage and grounding review use schema-constrained JSON responses and still validate every result in application code. If Gemini fails, ResolveAI tries OpenRouter; if both hosted providers fail, the ticket fails closed to human review. Free tiers improve learning and demo resilience, but are rate-limited and are not an SLA for private production customer data. You can return to a fully local writer by setting both providers to `ollama`.
 
 ## Draft Model Evaluation Lab
 
-Create a synthetic scenario and select one published source article. ResolveAI gives the exact same scenario and source packet to two independently configured writers, then uses the configured grounding reviewer to check both replies. Local Docker compares Ollama with OpenRouter; the cloud deployment compares the configured OpenRouter primary and fallback models. Each result records provider, resolved model, latency, reviewer outcome, and an optional human quality score from 1 to 5. These lab records are intentionally separate from support tickets and can never be approved or sent to a customer.
+Create a synthetic scenario and select one published source article. ResolveAI gives the exact same scenario and source packet to two independently configured writers, then uses the configured grounding reviewer to check both replies. Local Docker compares Ollama with OpenRouter; the hosted Gemini configuration compares Gemini with the configured OpenRouter model. Each result records provider, resolved model, latency, reviewer outcome, and an optional human quality score from 1 to 5. These lab records are intentionally separate from support tickets and can never be approved or sent to a customer.
 
 Clicking **Run both writers** now returns immediately with a durable job record. Redis is the short-lived work mailbox; PostgreSQL stores the job state permanently. The `worker` Docker service claims queued jobs, performs the slow writer/reviewer work, and saves `completed` or `failed`. If the worker restarts, unfinished jobs are re-queued from PostgreSQL. The page checks the saved job state every three seconds while work is active.
 

@@ -40,13 +40,6 @@ class TicketTriageSpecialist:
         "personal data": "Privacy requests require a human support owner.",
         "gdpr": "Privacy requests require a human support owner.",
     }
-    _routine_troubleshooting_signals = (
-        "sso",
-        "saml",
-        "access denied",
-        "identity provider",
-    )
-
     def __init__(self, chat_client: ChatClient) -> None:
         self.chat_client = chat_client
 
@@ -60,16 +53,6 @@ class TicketTriageSpecialist:
                     reason=reason,
                     model="deterministic-safety-rules",
                 )
-        if any(signal in text for signal in self._routine_troubleshooting_signals):
-            return TriageResult(
-                decision=TriageDecision.DRAFT_ALLOWED,
-                category=TriageCategory.TROUBLESHOOTING,
-                reason=(
-                    "This is a routine sign-in troubleshooting request. ResolveAI may draft "
-                    "only from approved guidance."
-                ),
-                model="deterministic-routine-rules",
-            )
         try:
             response = await self.chat_client.complete(
                 system=(

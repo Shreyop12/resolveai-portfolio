@@ -1,7 +1,7 @@
 import asyncio
 import re
 from functools import lru_cache
-from typing import Protocol
+from typing import Literal, Protocol
 
 import httpx
 
@@ -163,6 +163,7 @@ class OpenRouterChatClient:
         model_name: str | None = None,
         use_configured_fallback: bool = True,
         timeout_seconds: float = 120,
+        structured_output: Literal["none", "triage", "grounding"] = "none",
     ) -> None:
         settings = get_settings()
         self.base_url = settings.openrouter_base_url.rstrip("/")
@@ -172,6 +173,7 @@ class OpenRouterChatClient:
             settings.openrouter_fallback_draft_model if use_configured_fallback else None
         )
         self.timeout_seconds = timeout_seconds
+        self.structured_output = structured_output
         self.api_key = (
             settings.openrouter_api_key.get_secret_value()
             if settings.openrouter_api_key is not None
@@ -257,7 +259,7 @@ class OpenRouterChatClient:
             ],
             "stream": False,
         }
-        if "Return exactly one JSON object" in system:
+        if self.structured_output != "none":
             request_body["response_format"] = {"type": "json_object"}
         async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
             response = await client.post(
@@ -286,10 +288,211 @@ class OpenRouterChatClient:
         return isinstance(error, (httpx.ConnectError, httpx.TimeoutException))
 
 
+class GeminiChatClient:
+    """Direct Gemini adapter. The API key is read only by this backend process."""
+
+    def __init__(
+        self,
+        *,
+        model_name: str | None = None,
+        timeout_seconds: float | None = None,
+        structured_output: Literal["none", "triage", "grounding"] = "none",
+    ) -> None:
+        settings = get_settings()
+        self.base_url = settings.gemini_base_url.rstrip("/")
+        self.model_name = model_name or settings.gemini_model
+        self.timeout_seconds = timeout_seconds or settings.gemini_timeout_seconds
+        self.structured_output = structured_output
+        self.api_key = (
+            settings.gemini_api_key.get_secret_value()
+            if settings.gemini_api_key is not None
+            else None
+        )
+        self.last_attempts: list[dict[str, str | int | None]] = []
+
+    async def complete(self, *, system: str, user: str) -> str:
+        if not self.api_key:
+            raise EmbeddingProviderError(
+                "Gemini is selected for support generation, but RESOLVEAI_GEMINI_API_KEY is not set."
+            )
+
+        generation_config: dict[str, object] = {"temperature": 0.2}
+        schema = self._structured_schema()
+        if schema is not None:
+            generation_config["responseFormat"] = {
+                "text": {"mimeType": "application/json", "schema": schema}
+            }
+
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
+                response = await client.post(
+                    f"{self.base_url}/models/{self.model_name}:generateContent",
+                    headers={"x-goog-api-key": self.api_key},
+                    json={
+                        "systemInstruction": {"parts": [{"text": system}]},
+                        "contents": [{"role": "user", "parts": [{"text": user}]}],
+                        "generationConfig": generation_config,
+                    },
+                )
+                response.raise_for_status()
+        except httpx.HTTPError as error:
+            status_code = error.response.status_code if isinstance(error, httpx.HTTPStatusError) else None
+            self.last_attempts = [
+                {
+                    "provider": "gemini",
+                    "model": self.model_name,
+                    "outcome": "rate_limited" if status_code == 429 else "request_failed",
+                    "status_code": status_code,
+                }
+            ]
+            raise EmbeddingProviderError(self._error_message(status_code)) from error
+
+        content = extract_customer_facing_content(self._response_text(response.json()))
+        if len(content) < 20:
+            self.last_attempts = [
+                {
+                    "provider": "gemini",
+                    "model": self.model_name,
+                    "outcome": "incomplete_response",
+                    "status_code": None,
+                }
+            ]
+            raise EmbeddingProviderError("Gemini returned an empty or incomplete response.")
+        self.last_attempts = [
+            {
+                "provider": "gemini",
+                "model": self.model_name,
+                "outcome": "completed",
+                "status_code": None,
+            }
+        ]
+        return content
+
+    def _structured_schema(self) -> dict[str, object] | None:
+        if self.structured_output == "triage":
+            return {
+                "type": "object",
+                "properties": {
+                    "decision": {
+                        "type": "string",
+                        "enum": ["draft_allowed", "human_escalation"],
+                    },
+                    "category": {
+                        "type": "string",
+                        "enum": [
+                            "troubleshooting",
+                            "how_to",
+                            "account_or_billing",
+                            "security_or_privacy",
+                            "uncertain",
+                        ],
+                    },
+                    "reason": {"type": "string"},
+                },
+                "required": ["decision", "category", "reason"],
+            }
+        if self.structured_output == "grounding":
+            return {
+                "type": "object",
+                "properties": {
+                    "decision": {
+                        "type": "string",
+                        "enum": ["grounded", "needs_human_review"],
+                    },
+                    "reason": {"type": "string"},
+                },
+                "required": ["decision", "reason"],
+            }
+        return None
+
+    @staticmethod
+    def _response_text(payload: dict[str, object]) -> str:
+        candidates = payload.get("candidates", [])
+        if not isinstance(candidates, list) or not candidates:
+            return ""
+        candidate = candidates[0]
+        if not isinstance(candidate, dict):
+            return ""
+        content = candidate.get("content", {})
+        if not isinstance(content, dict):
+            return ""
+        parts = content.get("parts", [])
+        if not isinstance(parts, list):
+            return ""
+        return "".join(
+            part.get("text", "") for part in parts if isinstance(part, dict)
+        )
+
+    def _error_message(self, status_code: int | None) -> str:
+        if status_code == 429:
+            return "Gemini is temporarily rate limited."
+        if status_code is not None:
+            return f"Gemini rejected the support-generation request (HTTP {status_code})."
+        return "Gemini could not be reached for support generation."
+
+
+class FallbackChatClient:
+    """Try an independent hosted provider only after the configured primary fails."""
+
+    def __init__(self, primary: ChatClient, fallback: ChatClient) -> None:
+        self.primary = primary
+        self.fallback = fallback
+        self.model_name = primary.model_name
+        self.last_attempts: list[dict[str, str | int | None]] = []
+
+    async def complete(self, *, system: str, user: str) -> str:
+        try:
+            content = await self.primary.complete(system=system, user=user)
+            self.model_name = self.primary.model_name
+            self.last_attempts = list(getattr(self.primary, "last_attempts", []))
+            return content
+        except EmbeddingProviderError as primary_error:
+            primary_attempts = list(getattr(self.primary, "last_attempts", []))
+            try:
+                content = await self.fallback.complete(system=system, user=user)
+            except EmbeddingProviderError as fallback_error:
+                fallback_attempts = list(getattr(self.fallback, "last_attempts", []))
+                self.last_attempts = primary_attempts + fallback_attempts
+                raise EmbeddingProviderError(
+                    "The primary Gemini provider and the OpenRouter fallback both failed. "
+                    f"Gemini: {primary_error}. OpenRouter: {fallback_error}."
+                ) from fallback_error
+            self.model_name = self.fallback.model_name
+            self.last_attempts = primary_attempts + list(
+                getattr(self.fallback, "last_attempts", [])
+            )
+            return content
+
+
+def _gemini_with_openrouter_fallback(
+    *,
+    structured_output: Literal["none", "triage", "grounding"] = "none",
+    timeout_seconds: float | None = None,
+) -> ChatClient:
+    settings = get_settings()
+    return FallbackChatClient(
+        GeminiChatClient(
+            timeout_seconds=timeout_seconds,
+            structured_output=structured_output,
+        ),
+        OpenRouterChatClient(
+            timeout_seconds=timeout_seconds or 120,
+            structured_output=structured_output,
+        ),
+    )
+
+
 def get_triage_chat_client() -> ChatClient:
     settings = get_settings()
+    if settings.agent_provider == "gemini":
+        return _gemini_with_openrouter_fallback(
+            structured_output="triage", timeout_seconds=settings.openrouter_agent_timeout_seconds
+        )
     if settings.agent_provider == "openrouter":
-        return OpenRouterChatClient(timeout_seconds=settings.openrouter_agent_timeout_seconds)
+        return OpenRouterChatClient(
+            timeout_seconds=settings.openrouter_agent_timeout_seconds,
+            structured_output="triage",
+        )
     return OllamaChatClient(
         settings.ollama_triage_model, settings.ollama_triage_max_output_tokens
     )
@@ -297,8 +500,15 @@ def get_triage_chat_client() -> ChatClient:
 
 def get_reviewer_chat_client() -> ChatClient:
     settings = get_settings()
+    if settings.agent_provider == "gemini":
+        return _gemini_with_openrouter_fallback(
+            structured_output="grounding", timeout_seconds=settings.openrouter_agent_timeout_seconds
+        )
     if settings.agent_provider == "openrouter":
-        return OpenRouterChatClient(timeout_seconds=settings.openrouter_agent_timeout_seconds)
+        return OpenRouterChatClient(
+            timeout_seconds=settings.openrouter_agent_timeout_seconds,
+            structured_output="grounding",
+        )
     return OllamaChatClient(
         settings.ollama_reviewer_model, settings.ollama_reviewer_max_output_tokens
     )
@@ -314,6 +524,8 @@ def get_openrouter_draft_chat_client() -> ChatClient:
 
 def get_draft_chat_client() -> ChatClient:
     settings = get_settings()
+    if settings.draft_provider == "gemini":
+        return _gemini_with_openrouter_fallback()
     if settings.draft_provider == "openrouter":
         return get_openrouter_draft_chat_client()
     return get_ollama_draft_chat_client()

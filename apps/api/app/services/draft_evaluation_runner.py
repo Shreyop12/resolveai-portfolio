@@ -10,6 +10,7 @@ from app.repositories.knowledge import KnowledgeArticleRepository
 from app.services.draft_evaluation import DraftModelComparisonService
 from app.services.embeddings import (
     ChatClient,
+    GeminiChatClient,
     OpenRouterChatClient,
     get_ollama_draft_chat_client,
     get_openrouter_draft_chat_client,
@@ -73,6 +74,16 @@ async def _process_claimed_job(
 def _get_evaluation_writer_clients() -> tuple[ChatClient, ChatClient, str, str]:
     """Keep local comparisons local, while cloud comparisons never call laptop Ollama."""
     settings = get_settings()
+    if settings.agent_provider == "gemini":
+        return (
+            GeminiChatClient(model_name=settings.gemini_model),
+            OpenRouterChatClient(
+                model_name=settings.openrouter_draft_model,
+                use_configured_fallback=False,
+            ),
+            "gemini-primary",
+            "openrouter-fallback",
+        )
     if settings.agent_provider == "openrouter":
         fallback_model = settings.openrouter_fallback_draft_model
         if not fallback_model:

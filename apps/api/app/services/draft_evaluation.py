@@ -177,6 +177,19 @@ class DraftModelQualityService:
     @staticmethod
     def configured_models() -> list[ConfiguredDraftModel]:
         settings = get_settings()
+        if settings.agent_provider == "gemini":
+            return [
+                ConfiguredDraftModel(
+                    provider="gemini-primary",
+                    model=settings.gemini_model,
+                    role="hosted primary",
+                ),
+                ConfiguredDraftModel(
+                    provider="openrouter-fallback",
+                    model=settings.openrouter_draft_model,
+                    role="hosted fallback",
+                ),
+            ]
         if settings.agent_provider == "openrouter":
             configured = [
                 ConfiguredDraftModel(

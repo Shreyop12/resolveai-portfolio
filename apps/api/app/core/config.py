@@ -29,14 +29,18 @@ class Settings(BaseSettings):
     ollama_reviewer_model: str = "qwen3:4b"
     ollama_reviewer_max_output_tokens: int = Field(default=80, ge=20, le=500)
     draft_min_semantic_similarity: float = Field(default=0.55, ge=0.0, le=1.0)
-    draft_provider: Literal["ollama", "openrouter"] = "ollama"
-    agent_provider: Literal["ollama", "openrouter"] = "ollama"
+    draft_provider: Literal["ollama", "openrouter", "gemini"] = "ollama"
+    agent_provider: Literal["ollama", "openrouter", "gemini"] = "ollama"
     draft_evaluation_execution_mode: Literal["redis", "database", "inline"] = "redis"
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     openrouter_api_key: SecretStr | None = None
     openrouter_draft_model: str = "openai/gpt-oss-20b:free"
     openrouter_fallback_draft_model: str | None = "nvidia/nemotron-nano-9b-v2:free"
     openrouter_agent_timeout_seconds: int = Field(default=15, ge=5, le=60)
+    gemini_base_url: str = "https://generativelanguage.googleapis.com/v1beta"
+    gemini_api_key: SecretStr | None = None
+    gemini_model: str = "gemini-3.5-flash"
+    gemini_timeout_seconds: int = Field(default=30, ge=5, le=120)
 
     @field_validator("database_url", mode="before")
     @classmethod

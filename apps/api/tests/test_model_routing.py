@@ -6,6 +6,8 @@ import pytest
 from app.core.config import get_settings
 from app.services.embeddings import (
     EmbeddingProviderError,
+    FallbackChatClient,
+    GeminiChatClient,
     OpenRouterChatClient,
     get_draft_chat_client,
     get_reviewer_chat_client,
@@ -86,7 +88,9 @@ def test_openrouter_requests_json_mode_for_structured_agent_prompts(monkeypatch)
             )
 
     monkeypatch.setattr("app.services.embeddings.httpx.AsyncClient", FakeAsyncClient)
-    client = OpenRouterChatClient(use_configured_fallback=False)
+    client = OpenRouterChatClient(
+        use_configured_fallback=False, structured_output="triage"
+    )
 
     asyncio.run(
         client.complete(
@@ -99,10 +103,137 @@ def test_openrouter_requests_json_mode_for_structured_agent_prompts(monkeypatch)
     get_settings.cache_clear()
 
 
+def test_gemini_is_primary_and_openrouter_is_the_independent_fallback(monkeypatch) -> None:
+    monkeypatch.setenv("RESOLVEAI_DRAFT_PROVIDER", "gemini")
+    monkeypatch.setenv("RESOLVEAI_AGENT_PROVIDER", "gemini")
+    monkeypatch.setenv("RESOLVEAI_GEMINI_API_KEY", "gemini-test-key")
+    monkeypatch.setenv("RESOLVEAI_OPENROUTER_API_KEY", "openrouter-test-key")
+    monkeypatch.setenv("RESOLVEAI_GEMINI_MODEL", "gemini-test-model")
+    get_settings.cache_clear()
+
+    draft_client = get_draft_chat_client()
+    triage_client = get_triage_chat_client()
+    reviewer_client = get_reviewer_chat_client()
+
+    assert isinstance(draft_client, FallbackChatClient)
+    assert isinstance(draft_client.primary, GeminiChatClient)
+    assert isinstance(draft_client.fallback, OpenRouterChatClient)
+    assert draft_client.primary.model_name == "gemini-test-model"
+    assert isinstance(triage_client, FallbackChatClient)
+    assert isinstance(triage_client.primary, GeminiChatClient)
+    assert triage_client.primary.structured_output == "triage"
+    assert isinstance(reviewer_client, FallbackChatClient)
+    assert reviewer_client.primary.structured_output == "grounding"
+    get_settings.cache_clear()
+
+
+def test_gemini_requests_schema_constrained_json_for_triage(monkeypatch) -> None:
+    monkeypatch.setenv("RESOLVEAI_GEMINI_API_KEY", "gemini-test-key")
+    get_settings.cache_clear()
+    request_bodies: list[dict[str, object]] = []
+
+    class FakeAsyncClient:
+        def __init__(self, **_: object) -> None:
+            pass
+
+        async def __aenter__(self) -> "FakeAsyncClient":
+            return self
+
+        async def __aexit__(self, *_: object) -> None:
+            return None
+
+        async def post(self, url: str, **kwargs: object) -> httpx.Response:
+            request_bodies.append(kwargs["json"])  # type: ignore[arg-type]
+            request = httpx.Request("POST", url)
+            return httpx.Response(
+                200,
+                request=request,
+                json={
+                    "candidates": [
+                        {
+                            "content": {
+                                "parts": [
+                                    {
+                                        "text": '{"decision":"draft_allowed","category":"troubleshooting","reason":"Routine issue."}'
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                },
+            )
+
+    monkeypatch.setattr("app.services.embeddings.httpx.AsyncClient", FakeAsyncClient)
+    client = GeminiChatClient(structured_output="triage")
+
+    asyncio.run(client.complete(system="system", user="Synthetic triage request."))
+
+    response_format = request_bodies[0]["generationConfig"]["responseFormat"]  # type: ignore[index]
+    assert response_format["text"]["mimeType"] == "application/json"  # type: ignore[index]
+    assert response_format["text"]["schema"]["properties"]["decision"]["enum"] == [  # type: ignore[index]
+        "draft_allowed",
+        "human_escalation",
+    ]
+    get_settings.cache_clear()
+
+
+def test_gemini_failure_uses_openrouter_fallback(monkeypatch) -> None:
+    monkeypatch.setenv("RESOLVEAI_DRAFT_PROVIDER", "gemini")
+    monkeypatch.setenv("RESOLVEAI_GEMINI_API_KEY", "gemini-test-key")
+    monkeypatch.setenv("RESOLVEAI_OPENROUTER_API_KEY", "openrouter-test-key")
+    get_settings.cache_clear()
+
+    async def failed_primary(self: GeminiChatClient, *, system: str, user: str) -> str:
+        self.last_attempts = [
+            {"provider": "gemini", "model": self.model_name, "outcome": "rate_limited", "status_code": 429}
+        ]
+        raise EmbeddingProviderError("Gemini is temporarily rate limited.")
+
+    async def successful_fallback(
+        self: OpenRouterChatClient, *, system: str, user: str
+    ) -> str:
+        self.last_attempts = [
+            {"model": self.model_name, "outcome": "completed", "status_code": None}
+        ]
+        return "A complete fallback response from OpenRouter."
+
+    monkeypatch.setattr(GeminiChatClient, "complete", failed_primary)
+    monkeypatch.setattr(OpenRouterChatClient, "complete", successful_fallback)
+    client = get_draft_chat_client()
+
+    content = asyncio.run(client.complete(system="system", user="user"))
+
+    assert content == "A complete fallback response from OpenRouter."
+    assert client.model_name == client.fallback.model_name  # type: ignore[union-attr]
+    assert client.last_attempts[0]["provider"] == "gemini"
+    get_settings.cache_clear()
+
+
 def test_openrouter_uses_the_fixed_fallback_after_a_transient_primary_failure(monkeypatch) -> None:
     monkeypatch.setenv("RESOLVEAI_OPENROUTER_API_KEY", "test-key")
     monkeypatch.setenv("RESOLVEAI_OPENROUTER_DRAFT_MODEL", "primary:free")
     monkeypatch.setenv("RESOLVEAI_OPENROUTER_FALLBACK_DRAFT_MODEL", "fallback:free")
+    get_settings.cache_clear()
+
+
+def test_cloud_evaluation_compares_gemini_against_openrouter(monkeypatch) -> None:
+    monkeypatch.setenv("RESOLVEAI_AGENT_PROVIDER", "gemini")
+    monkeypatch.setenv("RESOLVEAI_GEMINI_API_KEY", "gemini-test-key")
+    monkeypatch.setenv("RESOLVEAI_OPENROUTER_API_KEY", "openrouter-test-key")
+    monkeypatch.setenv("RESOLVEAI_GEMINI_MODEL", "gemini-test-model")
+    monkeypatch.setenv("RESOLVEAI_OPENROUTER_DRAFT_MODEL", "openrouter-fallback:free")
+    get_settings.cache_clear()
+
+    primary, fallback, primary_label, fallback_label = _get_evaluation_writer_clients()
+    configured = DraftModelQualityService.configured_models()
+
+    assert isinstance(primary, GeminiChatClient)
+    assert isinstance(fallback, OpenRouterChatClient)
+    assert (primary_label, fallback_label) == ("gemini-primary", "openrouter-fallback")
+    assert [(item.provider, item.model) for item in configured] == [
+        ("gemini-primary", "gemini-test-model"),
+        ("openrouter-fallback", "openrouter-fallback:free"),
+    ]
     get_settings.cache_clear()
 
 
