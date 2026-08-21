@@ -532,7 +532,7 @@ export default function HomePage() {
     if (!selectedWorkspace) return;
     return runAction(`publish-document:${documentId}`, "Publishing document and creating embeddings…", "The document could not be published. Check the connection and try again.", async () => {
       const response = await fetch(`${API_BASE_URL}/api/v1/workspaces/${selectedWorkspace}/knowledge-articles/documents/${documentId}/publish`, { method: "PATCH" });
-      if (!response.ok) { setMessage("The document could not be published. Confirm Ollama is running to create its section embeddings."); return; }
+      if (!response.ok) { setMessage("The document could not be published. Check the configured embedding provider and try again."); return; }
       await Promise.all([loadArticles(selectedWorkspace), loadDocuments(selectedWorkspace)]);
       setMessage("Source document published. Its approved sections are now searchable by ResolveAI.");
     });
@@ -590,12 +590,12 @@ export default function HomePage() {
 
   async function reindexKnowledge() {
     if (!selectedWorkspace) return;
-    return runAction("reindex-knowledge", "Creating local search embeddings…", "Could not index the published sources. Check the connection and confirm Ollama is running locally.", async () => {
+    return runAction("reindex-knowledge", "Creating search embeddings…", "Could not index the published sources. Check the connection and embedding provider.", async () => {
       const response = await fetch(`${API_BASE_URL}/api/v1/workspaces/${selectedWorkspace}/knowledge-articles/reindex`, {
         method: "POST",
       });
       if (!response.ok) {
-        setMessage("Could not index the published sources. Confirm Ollama is running locally.");
+        setMessage("Could not index the published sources. Check the configured embedding provider.");
         return;
       }
       const data = (await response.json()) as { indexed: number; model: string };
@@ -612,12 +612,12 @@ export default function HomePage() {
       setMessage("Enter at least two characters to search by meaning.");
       return;
     }
-    return runAction("search-semantic", "Searching by meaning…", "Semantic search could not be completed. Check the connection and confirm Ollama is running locally.", async () => {
+    return runAction("search-semantic", "Searching by meaning…", "Semantic search could not be completed. Check the connection and embedding provider.", async () => {
       const response = await fetch(
         `${API_BASE_URL}/api/v1/workspaces/${selectedWorkspace}/knowledge-articles/semantic-search?q=${encodeURIComponent(query)}`,
       );
       if (!response.ok) {
-        setMessage("Semantic search could not be completed. Confirm Ollama is running locally.");
+        setMessage("Semantic search could not be completed. Check the configured embedding provider.");
         return;
       }
       const data = (await response.json()) as { query: string; items: KnowledgeSearchResult[] };
@@ -636,12 +636,12 @@ export default function HomePage() {
       setMessage("Enter at least two characters to combine the two search methods.");
       return;
     }
-    return runAction("search-hybrid", "Combining keyword and meaning results…", "Hybrid search could not be completed. Check the connection and confirm Ollama is running locally.", async () => {
+    return runAction("search-hybrid", "Combining keyword and meaning results…", "Hybrid search could not be completed. Check the connection and embedding provider.", async () => {
       const response = await fetch(
         `${API_BASE_URL}/api/v1/workspaces/${selectedWorkspace}/knowledge-articles/hybrid-search?q=${encodeURIComponent(query)}`,
       );
       if (!response.ok) {
-        setMessage("Hybrid search could not be completed. Confirm Ollama is running locally.");
+        setMessage("Hybrid search could not be completed. Check the configured embedding provider.");
         return;
       }
       const data = (await response.json()) as { query: string; items: HybridSearchResult[] };
@@ -802,12 +802,12 @@ export default function HomePage() {
 
   async function runEvaluation() {
     if (!selectedWorkspace) return;
-    return runAction("run-retrieval-evaluation", "Running hybrid retrieval evaluation…", "Retrieval evaluation could not run. Check the connection and confirm Ollama is running locally.", async () => {
+    return runAction("run-retrieval-evaluation", "Running hybrid retrieval evaluation…", "Retrieval evaluation could not run. Check the connection and embedding provider.", async () => {
       const response = await fetch(`${API_BASE_URL}/api/v1/workspaces/${selectedWorkspace}/retrieval-evaluations/run`, {
         method: "POST",
       });
       if (!response.ok) {
-        setMessage("Retrieval evaluation could not run. Confirm Ollama is running locally.");
+        setMessage("Retrieval evaluation could not run. Check the configured embedding provider.");
         return;
       }
       setEvaluationReport((await response.json()) as RetrievalEvaluationReport);
@@ -1037,8 +1037,8 @@ export default function HomePage() {
       </section>
 
       <section className="panel knowledge-panel search-panel area-knowledge">
-        <div className="section-heading"><div><p className="label">STEP 6</p><h2>Search by meaning</h2></div><span>Local Ollama + pgvector</span></div>
-        <p className="helper">Indexing turns approved source text into local meaning vectors. Semantic search can surface related guidance even when the words differ.</p>
+        <div className="section-heading"><div><p className="label">STEP 6</p><h2>Search by meaning</h2></div><span>Embeddings + pgvector</span></div>
+        <p className="helper">Indexing turns approved source text into meaning vectors. Semantic search can surface related guidance even when the words differ.</p>
         <div className="semantic-actions"><button type="button" onClick={reindexKnowledge} disabled={!selectedWorkspace || isActionPending("reindex-knowledge")}>{isActionPending("reindex-knowledge") ? "Indexing…" : "Index published sources"}</button></div>
         <form className="compact-form search-form" onSubmit={searchSemantically}>
           <input name="semanticQuery" placeholder="For example: company login is failing" minLength={2} required disabled={!selectedWorkspace || isActionPending("search-semantic")} />
