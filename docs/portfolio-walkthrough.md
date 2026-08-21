@@ -43,11 +43,11 @@ ResolveAI fuses the two rankings. This is often more reliable than using only ve
 
 ## Demo script
 
-1. Open `http://localhost:3000` and select the support workspace.
+1. Open the deployed application at <https://resolveai-portfolio.vercel.app/> (or `http://localhost:3000` when running locally) and select the support workspace.
 2. Create or view a published knowledge article, then create a ticket that matches it.
 3. Run triage and generate a draft. Point out the timeline: triage → hybrid retrieval → writer → grounding review.
 4. Explain that the reply is only a draft. A person must approve it before the ticket is resolved.
-5. In the synthetic evaluation lab, run the same source-backed scenario against the two configured writers. Local Docker compares Ollama and OpenRouter; the cloud deployment compares the fixed OpenRouter primary and fallback models. Point out the provider trail: GPT OSS is the hosted primary and GLM is the independent fallback comparison.
+5. In the synthetic evaluation lab, run the same source-backed scenario against the two configured writers. Local Docker compares Ollama and OpenRouter; the hosted deployment compares Gemini 3.5 Flash-Lite with the configured fixed OpenRouter writer. Point out the provider trail, grounding outcome, and latency instead of claiming that either model is always better.
 6. Score the outputs, inspect the separate grounding and zero-latency draft-quality checks, then set a model-selection policy. Explain that it recommends—not automatically changes—the model.
 7. Create a named experiment to show how evidence can be reproduced later.
 
@@ -57,7 +57,7 @@ ResolveAI fuses the two rankings. This is often more reliable than using only ve
 | --- | --- |
 | Hallucinated answer | Draft writer receives only approved retrieved sources; a separate reviewer checks grounding. |
 | Sensitive support request | Triage escalates refunds, deletion, credential, security, and privacy requests. |
-| Slow model call | Durable job in PostgreSQL + Redis queue; a worker handles it outside the web request. |
+| Slow model call | Durable job state in PostgreSQL; a worker handles it outside the web request. |
 | Model comparison | Synthetic, isolated lab cases with per-model latency, grounding result, and human score. |
 | Hosted free-model failure | Safe provider-attempt trail records the model, outcome, and HTTP status; it never records keys or prompts. |
 | Readable but poor draft | A deterministic quality check catches copied ticket text, unreadable output, and a missing next step without another model call. |

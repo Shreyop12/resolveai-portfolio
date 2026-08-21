@@ -4,7 +4,7 @@ This is the evidence-gathering stage of ResolveAI. Do not judge a model by one i
 
 ## 1. Synthetic writer comparison — AI Lab
 
-Open Step 9, choose the cases below, and use **Run both writers**. Each run compares the two writers configured for that environment: local Docker uses Ollama and OpenRouter, while the cloud deployment uses the fixed OpenRouter primary and fallback models. These runs never create a customer ticket or send a customer message.
+Open Step 9, choose the cases below, and use **Run both writers**. Each run compares the two writers configured for that environment: local Docker uses Ollama and OpenRouter, while the cloud deployment compares Gemini 3.5 Flash-Lite with the configured fixed OpenRouter writer. These runs never create a customer ticket or send a customer message.
 
 | Case | Evaluation ID | What it proves | Expected source |
 | --- | --- | --- | --- |
@@ -18,8 +18,8 @@ Open Step 9, choose the cases below, and use **Run both writers**. Each run comp
 
 For every fresh run, record:
 
-- **Provider trail:** GPT OSS should be the hosted primary. If it is rate limited, the trail shows whether GLM was tried and why it succeeded or failed.
-- **Writer time and GPU reviewer time:** these explain latency honestly. The active total excludes time waiting behind another GPU review.
+- **Provider trail:** Gemini is the hosted primary in the current deployment. The AI Lab's comparison writer is the configured fixed OpenRouter model. Normal ticket workflows may use OpenRouter as a fallback if Gemini fails or is rate limited.
+- **Writer and reviewer time:** these explain latency honestly. Distinguish active model time from queue wait or an embedding cold start.
 - **Grounding:** `grounded` means the reviewer found the claims supported by the selected handbook article.
 - **Quality check:** this is a zero-latency heuristic for copied ticket text, unreadable output, and a missing next step. It does not replace your judgement.
 - **Your 1–5 human score:** judge helpfulness, clarity, and whether you would let a support agent edit and send it.

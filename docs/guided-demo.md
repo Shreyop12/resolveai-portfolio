@@ -67,7 +67,7 @@ Use Steps 5–7 with one exact query, such as `SSO`, and one natural-language qu
 
 In **Step 9**, create a synthetic—not customer—scenario, choose a published source, and run both writers. Then inspect Steps 10 and 11.
 
-This work is handled by a background worker, so the browser does not have to wait for a slow model response. Redis carries the short-lived work message; PostgreSQL keeps the durable job and its results.
+This work is handled by a background worker, so the browser does not have to wait for a slow model response. PostgreSQL keeps the durable job and its results while the worker performs the slow work.
 
 Compare models using three kinds of evidence:
 

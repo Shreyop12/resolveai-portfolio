@@ -14,6 +14,8 @@ Read the [deployment guide](docs/deployment-guide.md) before deploying: it expla
 
 Use the [portfolio walkthrough](docs/portfolio-walkthrough.md) to understand the architecture, lead a demo, and practice explaining the project in an interview.
 
+Use the [portfolio demo and evidence guide](docs/portfolio-demo-and-evidence.md) for a short, interview-ready demonstration and a checklist of results to collect without inventing metrics.
+
 ## Run locally
 
 ```bash
@@ -130,7 +132,7 @@ The keys are never committed: `.env` is ignored by Git and the API reads them on
 
 Create a synthetic scenario and select one published source article. ResolveAI gives the exact same scenario and source packet to two independently configured writers, then uses the configured grounding reviewer to check both replies. Local Docker compares Ollama with OpenRouter; the hosted Gemini configuration compares Gemini with the configured OpenRouter model. Each result records provider, resolved model, latency, reviewer outcome, and an optional human quality score from 1 to 5. These lab records are intentionally separate from support tickets and can never be approved or sent to a customer.
 
-Clicking **Run both writers** now returns immediately with a durable job record. Redis is the short-lived work mailbox; PostgreSQL stores the job state permanently. The `worker` Docker service claims queued jobs, performs the slow writer/reviewer work, and saves `completed` or `failed`. If the worker restarts, unfinished jobs are re-queued from PostgreSQL. The page checks the saved job state every three seconds while work is active.
+Clicking **Run both writers** now returns immediately with a durable job record. PostgreSQL stores and coordinates the queued job state, and the `worker` service claims the slow writer/reviewer work outside the web request. It saves `completed` or `failed`; if the worker restarts, unfinished jobs are re-queued from PostgreSQL. The page checks the saved job state every three seconds while work is active.
 
 Local Ollama writing is allowed up to five minutes by default (`RESOLVEAI_OLLAMA_CHAT_TIMEOUT_SECONDS=300`). A timeout now says that the model needed more time, rather than incorrectly claiming Ollama is not running.
 
