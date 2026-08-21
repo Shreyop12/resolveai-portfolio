@@ -1,0 +1,14 @@
+{
+  "id": "deployment-001",
+  "service": "checkout",
+  "version": "v1.8.4",
+  "started_at": "2026-08-20T14:30:40Z",
+  "completed_at": "2026-08-20T14:31:51Z",
+  "commit_sha": "8af91c0d",
+  "changes": [
+    {
+      "file": "config/checkout.env",
+      "summary": "Updated the checkout Redis connection URL."
+    }
+  ]
+}

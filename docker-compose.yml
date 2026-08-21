@@ -1,0 +1,112 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-resolveai}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-resolveai}
+      POSTGRES_DB: ${POSTGRES_DB:-resolveai}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  api:
+    build:
+      context: ./apps/api
+    environment:
+      RESOLVEAI_DATABASE_URL: ${RESOLVEAI_DATABASE_URL:-postgresql+asyncpg://resolveai:resolveai@postgres:5432/resolveai}
+      RESOLVEAI_REDIS_URL: ${RESOLVEAI_REDIS_URL:-redis://redis:6379/0}
+      RESOLVEAI_CORS_ORIGINS: ${RESOLVEAI_CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+      RESOLVEAI_OLLAMA_BASE_URL: ${RESOLVEAI_OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      RESOLVEAI_OLLAMA_EMBEDDING_MODEL: ${RESOLVEAI_OLLAMA_EMBEDDING_MODEL:-embeddinggemma}
+      RESOLVEAI_EMBEDDING_PROVIDER: ${RESOLVEAI_EMBEDDING_PROVIDER:-ollama}
+      RESOLVEAI_FASTEMBED_EMBEDDING_MODEL: ${RESOLVEAI_FASTEMBED_EMBEDDING_MODEL:-nomic-ai/nomic-embed-text-v1.5-Q}
+      RESOLVEAI_OLLAMA_CHAT_MODEL: ${RESOLVEAI_OLLAMA_CHAT_MODEL:-qwen3:4b}
+      RESOLVEAI_OLLAMA_CHAT_TIMEOUT_SECONDS: ${RESOLVEAI_OLLAMA_CHAT_TIMEOUT_SECONDS:-300}
+      RESOLVEAI_OLLAMA_TRIAGE_MODEL: ${RESOLVEAI_OLLAMA_TRIAGE_MODEL:-qwen3:4b}
+      RESOLVEAI_OLLAMA_REVIEWER_MODEL: ${RESOLVEAI_OLLAMA_REVIEWER_MODEL:-qwen3:4b}
+      RESOLVEAI_OLLAMA_KEEP_ALIVE: ${RESOLVEAI_OLLAMA_KEEP_ALIVE:-15m}
+      RESOLVEAI_OLLAMA_DRAFT_MAX_OUTPUT_TOKENS: ${RESOLVEAI_OLLAMA_DRAFT_MAX_OUTPUT_TOKENS:-220}
+      RESOLVEAI_OLLAMA_TRIAGE_MAX_OUTPUT_TOKENS: ${RESOLVEAI_OLLAMA_TRIAGE_MAX_OUTPUT_TOKENS:-80}
+      RESOLVEAI_OLLAMA_REVIEWER_MAX_OUTPUT_TOKENS: ${RESOLVEAI_OLLAMA_REVIEWER_MAX_OUTPUT_TOKENS:-80}
+      RESOLVEAI_DRAFT_PROVIDER: ${RESOLVEAI_DRAFT_PROVIDER:-ollama}
+      RESOLVEAI_AGENT_PROVIDER: ${RESOLVEAI_AGENT_PROVIDER:-ollama}
+      RESOLVEAI_DRAFT_EVALUATION_EXECUTION_MODE: ${RESOLVEAI_DRAFT_EVALUATION_EXECUTION_MODE:-redis}
+      RESOLVEAI_OPENROUTER_API_KEY: ${RESOLVEAI_OPENROUTER_API_KEY:-}
+      RESOLVEAI_OPENROUTER_DRAFT_MODEL: ${RESOLVEAI_OPENROUTER_DRAFT_MODEL:-openai/gpt-oss-20b:free}
+      RESOLVEAI_OPENROUTER_FALLBACK_DRAFT_MODEL: ${RESOLVEAI_OPENROUTER_FALLBACK_DRAFT_MODEL:-z-ai/glm-5.2:free}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", ".venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health').read()"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  worker:
+    build:
+      context: ./apps/api
+    command: [".venv/bin/python", "-m", "app.worker"]
+    environment:
+      RESOLVEAI_DATABASE_URL: ${RESOLVEAI_DATABASE_URL:-postgresql+asyncpg://resolveai:resolveai@postgres:5432/resolveai}
+      RESOLVEAI_REDIS_URL: ${RESOLVEAI_REDIS_URL:-redis://redis:6379/0}
+      RESOLVEAI_OLLAMA_BASE_URL: ${RESOLVEAI_OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      RESOLVEAI_OLLAMA_EMBEDDING_MODEL: ${RESOLVEAI_OLLAMA_EMBEDDING_MODEL:-embeddinggemma}
+      RESOLVEAI_EMBEDDING_PROVIDER: ${RESOLVEAI_EMBEDDING_PROVIDER:-ollama}
+      RESOLVEAI_FASTEMBED_EMBEDDING_MODEL: ${RESOLVEAI_FASTEMBED_EMBEDDING_MODEL:-nomic-ai/nomic-embed-text-v1.5-Q}
+      RESOLVEAI_OLLAMA_CHAT_MODEL: ${RESOLVEAI_OLLAMA_CHAT_MODEL:-qwen3:4b}
+      RESOLVEAI_OLLAMA_CHAT_TIMEOUT_SECONDS: ${RESOLVEAI_OLLAMA_CHAT_TIMEOUT_SECONDS:-300}
+      RESOLVEAI_OLLAMA_TRIAGE_MODEL: ${RESOLVEAI_OLLAMA_TRIAGE_MODEL:-qwen3:4b}
+      RESOLVEAI_OLLAMA_REVIEWER_MODEL: ${RESOLVEAI_OLLAMA_REVIEWER_MODEL:-qwen3:4b}
+      RESOLVEAI_OLLAMA_KEEP_ALIVE: ${RESOLVEAI_OLLAMA_KEEP_ALIVE:-15m}
+      RESOLVEAI_OLLAMA_DRAFT_MAX_OUTPUT_TOKENS: ${RESOLVEAI_OLLAMA_DRAFT_MAX_OUTPUT_TOKENS:-220}
+      RESOLVEAI_OLLAMA_TRIAGE_MAX_OUTPUT_TOKENS: ${RESOLVEAI_OLLAMA_TRIAGE_MAX_OUTPUT_TOKENS:-80}
+      RESOLVEAI_OLLAMA_REVIEWER_MAX_OUTPUT_TOKENS: ${RESOLVEAI_OLLAMA_REVIEWER_MAX_OUTPUT_TOKENS:-80}
+      RESOLVEAI_DRAFT_PROVIDER: ${RESOLVEAI_DRAFT_PROVIDER:-ollama}
+      RESOLVEAI_AGENT_PROVIDER: ${RESOLVEAI_AGENT_PROVIDER:-ollama}
+      RESOLVEAI_DRAFT_EVALUATION_EXECUTION_MODE: ${RESOLVEAI_DRAFT_EVALUATION_EXECUTION_MODE:-redis}
+      RESOLVEAI_OPENROUTER_API_KEY: ${RESOLVEAI_OPENROUTER_API_KEY:-}
+      RESOLVEAI_OPENROUTER_DRAFT_MODEL: ${RESOLVEAI_OPENROUTER_DRAFT_MODEL:-openai/gpt-oss-20b:free}
+      RESOLVEAI_OPENROUTER_FALLBACK_DRAFT_MODEL: ${RESOLVEAI_OPENROUTER_FALLBACK_DRAFT_MODEL:-z-ai/glm-5.2:free}
+    depends_on:
+      api:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ./apps/web
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+    depends_on:
+      - api
+    ports:
+      - "3000:3000"
+
+volumes:
+  postgres_data:
+  redis_data:

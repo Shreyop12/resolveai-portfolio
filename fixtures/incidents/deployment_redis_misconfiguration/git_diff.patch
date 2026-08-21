@@ -1,0 +1,9 @@
+diff --git a/config/checkout.env b/config/checkout.env
+index 31b0b4a..8af91c0 100644
+--- a/config/checkout.env
++++ b/config/checkout.env
+@@ -1,3 +1,3 @@
+ CHECKOUT_PORT=8080
+-REDIS_URL=redis://redis:6379/0
++REDIS_URL=redis//redis:6379/0
+ CHECKOUT_TIMEOUT_SECONDS=2

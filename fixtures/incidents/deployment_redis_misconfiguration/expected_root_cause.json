@@ -1,0 +1,15 @@
+{
+  "root_cause": "Invalid REDIS_URL introduced in checkout deployment v1.8.4.",
+  "confidence": 0.92,
+  "severity": "high",
+  "evidence_ids": ["deployment-001", "log-002", "metric-002", "metric-003"],
+  "alternative_hypotheses": [
+    "Redis server outage",
+    "Network failure between checkout and Redis"
+  ],
+  "recommended_actions": [
+    "Restore the previous REDIS_URL.",
+    "Roll back checkout deployment v1.8.4.",
+    "Verify Redis connectivity and checkout health checks."
+  ]
+}

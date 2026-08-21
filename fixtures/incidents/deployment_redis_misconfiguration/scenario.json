@@ -1,0 +1,10 @@
+{
+  "scenario_id": "deployment_redis_misconfiguration",
+  "name": "Checkout failures after a Redis configuration deployment",
+  "description": "A checkout deployment introduces an invalid REDIS_URL, causing Redis connection failures and HTTP 500 responses.",
+  "incident": {
+    "title": "Production API returning 500 errors",
+    "description": "Errors started immediately after deployment v1.8.4. Checkout service appears affected.",
+    "severity": "high"
+  }
+}

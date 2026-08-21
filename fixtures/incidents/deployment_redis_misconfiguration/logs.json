@@ -1,0 +1,26 @@
+[
+  {
+    "id": "log-001",
+    "timestamp": "2026-08-20T14:31:51Z",
+    "service": "deployment-controller",
+    "level": "INFO",
+    "message": "Deployment checkout v1.8.4 completed.",
+    "attributes": {"deployment_id": "deployment-001", "version": "v1.8.4"}
+  },
+  {
+    "id": "log-002",
+    "timestamp": "2026-08-20T14:32:06Z",
+    "service": "checkout",
+    "level": "ERROR",
+    "message": "Redis connection failed: invalid URL scheme in REDIS_URL.",
+    "attributes": {"error_type": "RedisConnectionError", "http_status": 500}
+  },
+  {
+    "id": "log-003",
+    "timestamp": "2026-08-20T14:32:14Z",
+    "service": "checkout",
+    "level": "ERROR",
+    "message": "POST /checkout returned 500 while loading cart state.",
+    "attributes": {"http_status": 500, "route": "/checkout"}
+  }
+]

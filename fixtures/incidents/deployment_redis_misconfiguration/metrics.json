@@ -1,0 +1,26 @@
+[
+  {
+    "id": "metric-001",
+    "timestamp": "2026-08-20T14:31:45Z",
+    "metric": "http_error_rate",
+    "value": 0.2,
+    "unit": "percent",
+    "labels": {"service": "checkout", "status_class": "5xx"}
+  },
+  {
+    "id": "metric-002",
+    "timestamp": "2026-08-20T14:32:15Z",
+    "metric": "http_error_rate",
+    "value": 38.0,
+    "unit": "percent",
+    "labels": {"service": "checkout", "status_class": "5xx"}
+  },
+  {
+    "id": "metric-003",
+    "timestamp": "2026-08-20T14:32:12Z",
+    "metric": "redis_connection_failures",
+    "value": 47.0,
+    "unit": "count_per_minute",
+    "labels": {"service": "checkout"}
+  }
+]
