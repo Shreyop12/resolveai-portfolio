@@ -44,10 +44,12 @@ class Settings(BaseSettings):
         if not isinstance(value, str):
             return value
         if value.startswith("postgres://"):
-            return value.replace("postgres://", "postgresql+asyncpg://", 1)
-        if value.startswith("postgresql://"):
-            return value.replace("postgresql://", "postgresql+asyncpg://", 1)
-        return value
+            value = value.replace("postgres://", "postgresql+asyncpg://", 1)
+        elif value.startswith("postgresql://"):
+            value = value.replace("postgresql://", "postgresql+asyncpg://", 1)
+        # Northflank's standard URI uses libpq's ``sslmode`` option. asyncpg
+        # accepts the equivalent option as ``ssl`` instead.
+        return value.replace("?sslmode=", "?ssl=").replace("&sslmode=", "&ssl=")
 
     @property
     def cors_origin_list(self) -> list[str]:
@@ -56,7 +58,11 @@ class Settings(BaseSettings):
     @property
     def migration_database_url(self) -> str:
         """Return the synchronous URL required by Alembic migrations."""
-        return self.database_url.replace("postgresql+asyncpg", "postgresql+psycopg")
+        return (
+            self.database_url.replace("postgresql+asyncpg", "postgresql+psycopg")
+            .replace("?ssl=", "?sslmode=")
+            .replace("&ssl=", "&sslmode=")
+        )
 
 
 @lru_cache
