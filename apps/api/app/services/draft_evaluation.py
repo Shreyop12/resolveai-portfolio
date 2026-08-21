@@ -44,11 +44,15 @@ class DraftModelComparisonService:
         ollama_writer_client: ChatClient,
         openrouter_writer_client: ChatClient,
         reviewer: GroundingReviewer,
+        first_writer_provider: str = "ollama",
+        second_writer_provider: str = "openrouter",
     ) -> None:
         self.repository = repository
         self.ollama_writer_client = ollama_writer_client
         self.openrouter_writer_client = openrouter_writer_client
         self.reviewer = reviewer
+        self.first_writer_provider = first_writer_provider
+        self.second_writer_provider = second_writer_provider
 
     async def compare(
         self, case: DraftEvaluationCase, article: KnowledgeArticle
@@ -64,11 +68,15 @@ class DraftModelComparisonService:
         )
         sources = [(article.article_id, article.title, article.body)]
         attempts = await asyncio.gather(
-            self._write_draft(ticket, sources, "ollama", self.ollama_writer_client),
-            self._write_draft(ticket, sources, "openrouter", self.openrouter_writer_client),
+            self._write_draft(
+                ticket, sources, self.first_writer_provider, self.ollama_writer_client
+            ),
+            self._write_draft(
+                ticket, sources, self.second_writer_provider, self.openrouter_writer_client
+            ),
         )
-        # Both reviews use the same local GPU-backed reviewer. Serializing them avoids
-        # VRAM contention while keeping the two network/model writer calls concurrent.
+        # Both reviews use the same reviewer. Serializing them keeps comparisons fair
+        # while the two independent writer calls run concurrently.
         return [
             await self._review_and_save(case, ticket, sources, attempt)
             for attempt in attempts
@@ -169,6 +177,24 @@ class DraftModelQualityService:
     @staticmethod
     def configured_models() -> list[ConfiguredDraftModel]:
         settings = get_settings()
+        if settings.agent_provider == "openrouter":
+            configured = [
+                ConfiguredDraftModel(
+                    provider="openrouter-primary",
+                    model=settings.openrouter_draft_model,
+                    role="hosted primary",
+                )
+            ]
+            if settings.openrouter_fallback_draft_model:
+                configured.append(
+                    ConfiguredDraftModel(
+                        provider="openrouter-fallback",
+                        model=settings.openrouter_fallback_draft_model,
+                        role="hosted fallback",
+                    )
+                )
+            return configured
+
         configured = [
             ConfiguredDraftModel(
                 provider="ollama", model=settings.ollama_chat_model, role="local baseline"

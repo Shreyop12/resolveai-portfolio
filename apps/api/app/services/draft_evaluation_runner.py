@@ -9,10 +9,13 @@ from app.repositories.draft_evaluations import DraftEvaluationRepository
 from app.repositories.knowledge import KnowledgeArticleRepository
 from app.services.draft_evaluation import DraftModelComparisonService
 from app.services.embeddings import (
+    ChatClient,
+    OpenRouterChatClient,
     get_ollama_draft_chat_client,
     get_openrouter_draft_chat_client,
     get_reviewer_chat_client,
 )
+from app.core.config import get_settings
 from app.services.grounding_reviewer import GroundingReviewer
 
 logger = logging.getLogger(__name__)
@@ -51,13 +54,43 @@ async def _process_claimed_job(
         )
         if article is None or article.status != ArticleStatus.PUBLISHED:
             raise ValueError("The expected evaluation source must remain published.")
-        await DraftModelComparisonService(
+        first_writer, second_writer, first_provider, second_provider = _get_evaluation_writer_clients()
+        comparison = DraftModelComparisonService(
             repository,
-            get_ollama_draft_chat_client(),
-            get_openrouter_draft_chat_client(),
+            first_writer,
+            second_writer,
             GroundingReviewer(get_reviewer_chat_client()),
-        ).compare(case, article)
+            first_provider,
+            second_provider,
+        )
+        await comparison.compare(case, article)
         await repository.complete_job(job)
     except Exception as error:
         logger.exception("Draft evaluation job %s failed.", job.job_id)
         await repository.fail_job(job, str(error) or "The worker stopped unexpectedly.")
+
+
+def _get_evaluation_writer_clients() -> tuple[ChatClient, ChatClient, str, str]:
+    """Keep local comparisons local, while cloud comparisons never call laptop Ollama."""
+    settings = get_settings()
+    if settings.agent_provider == "openrouter":
+        fallback_model = settings.openrouter_fallback_draft_model
+        if not fallback_model:
+            raise ValueError(
+                "Cloud model comparisons require RESOLVEAI_OPENROUTER_FALLBACK_DRAFT_MODEL."
+            )
+        return (
+            OpenRouterChatClient(
+                model_name=settings.openrouter_draft_model,
+                use_configured_fallback=False,
+            ),
+            OpenRouterChatClient(model_name=fallback_model, use_configured_fallback=False),
+            "openrouter-primary",
+            "openrouter-fallback",
+        )
+    return (
+        get_ollama_draft_chat_client(),
+        get_openrouter_draft_chat_client(),
+        "ollama",
+        "openrouter",
+    )

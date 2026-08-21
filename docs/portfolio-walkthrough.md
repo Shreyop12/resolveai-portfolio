@@ -47,7 +47,7 @@ ResolveAI fuses the two rankings. This is often more reliable than using only ve
 2. Create or view a published knowledge article, then create a ticket that matches it.
 3. Run triage and generate a draft. Point out the timeline: triage → hybrid retrieval → writer → grounding review.
 4. Explain that the reply is only a draft. A person must approve it before the ticket is resolved.
-5. In the synthetic evaluation lab, run the same source-backed scenario against local Ollama and OpenRouter. Point out the provider trail: GPT OSS is the hosted primary and GLM is only a temporary fallback when the primary has a recoverable failure.
+5. In the synthetic evaluation lab, run the same source-backed scenario against the two configured writers. Local Docker compares Ollama and OpenRouter; the cloud deployment compares the fixed OpenRouter primary and fallback models. Point out the provider trail: GPT OSS is the hosted primary and GLM is the independent fallback comparison.
 6. Score the outputs, inspect the separate grounding and zero-latency draft-quality checks, then set a model-selection policy. Explain that it recommends—not automatically changes—the model.
 7. Create a named experiment to show how evidence can be reproduced later.
 

@@ -1071,7 +1071,7 @@ export default function HomePage() {
       </section>
 
       <section className="panel knowledge-panel search-panel area-lab">
-        <div className="section-heading"><div><p className="label">STEP 9</p><h2>Compare draft models safely</h2></div><span>Ollama vs OpenRouter</span></div>
+        <div className="section-heading"><div><p className="label">STEP 9</p><h2>Compare draft models safely</h2></div><span>Configured writers</span></div>
         <p className="helper">This lab is your labelled benchmark dataset: each synthetic customer scenario is paired with the published source a human expects to answer it. A background worker runs slow model calls, so the browser is never held open.</p>
         <form className="ticket-form" onSubmit={createDraftEvaluationCase}>
           <input name="draftEvaluationSubject" placeholder="Synthetic ticket subject" minLength={3} required disabled={!selectedWorkspace || isActionPending("create-draft-evaluation")} />

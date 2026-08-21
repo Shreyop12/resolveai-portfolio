@@ -4,7 +4,7 @@ This is the evidence-gathering stage of ResolveAI. Do not judge a model by one i
 
 ## 1. Synthetic writer comparison — AI Lab
 
-Open Step 9, choose the cases below, and use **Run both writers**. Each run compares the local Ollama writer against the hosted OpenRouter writer. These runs never create a customer ticket or send a customer message.
+Open Step 9, choose the cases below, and use **Run both writers**. Each run compares the two writers configured for that environment: local Docker uses Ollama and OpenRouter, while the cloud deployment uses the fixed OpenRouter primary and fallback models. These runs never create a customer ticket or send a customer message.
 
 | Case | Evaluation ID | What it proves | Expected source |
 | --- | --- | --- | --- |

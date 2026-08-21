@@ -157,12 +157,19 @@ class OllamaChatClient:
 class OpenRouterChatClient:
     """OpenAI-compatible chat adapter used only when explicitly configured."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        model_name: str | None = None,
+        use_configured_fallback: bool = True,
+    ) -> None:
         settings = get_settings()
         self.base_url = settings.openrouter_base_url.rstrip("/")
-        self.model_name = settings.openrouter_draft_model
-        self.primary_model_name = settings.openrouter_draft_model
-        self.fallback_model_name = settings.openrouter_fallback_draft_model
+        self.model_name = model_name or settings.openrouter_draft_model
+        self.primary_model_name = self.model_name
+        self.fallback_model_name = (
+            settings.openrouter_fallback_draft_model if use_configured_fallback else None
+        )
         self.api_key = (
             settings.openrouter_api_key.get_secret_value()
             if settings.openrouter_api_key is not None

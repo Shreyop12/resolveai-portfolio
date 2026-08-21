@@ -11,6 +11,8 @@ from app.services.embeddings import (
     get_reviewer_chat_client,
     get_triage_chat_client,
 )
+from app.services.draft_evaluation import DraftModelQualityService
+from app.services.draft_evaluation_runner import _get_evaluation_writer_clients
 
 
 def test_openrouter_is_selected_only_when_explicitly_configured(monkeypatch) -> None:
@@ -58,6 +60,30 @@ def test_openrouter_uses_the_fixed_fallback_after_a_transient_primary_failure(mo
     monkeypatch.setenv("RESOLVEAI_OPENROUTER_API_KEY", "test-key")
     monkeypatch.setenv("RESOLVEAI_OPENROUTER_DRAFT_MODEL", "primary:free")
     monkeypatch.setenv("RESOLVEAI_OPENROUTER_FALLBACK_DRAFT_MODEL", "fallback:free")
+    get_settings.cache_clear()
+
+
+def test_cloud_evaluation_compares_fixed_openrouter_models(monkeypatch) -> None:
+    monkeypatch.setenv("RESOLVEAI_AGENT_PROVIDER", "openrouter")
+    monkeypatch.setenv("RESOLVEAI_OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setenv("RESOLVEAI_OPENROUTER_DRAFT_MODEL", "primary:free")
+    monkeypatch.setenv("RESOLVEAI_OPENROUTER_FALLBACK_DRAFT_MODEL", "fallback:free")
+    get_settings.cache_clear()
+
+    primary, fallback, primary_label, fallback_label = _get_evaluation_writer_clients()
+    configured = DraftModelQualityService.configured_models()
+
+    assert isinstance(primary, OpenRouterChatClient)
+    assert isinstance(fallback, OpenRouterChatClient)
+    assert primary.model_name == "primary:free"
+    assert fallback.model_name == "fallback:free"
+    assert primary.fallback_model_name is None
+    assert fallback.fallback_model_name is None
+    assert (primary_label, fallback_label) == ("openrouter-primary", "openrouter-fallback")
+    assert [(item.provider, item.model) for item in configured] == [
+        ("openrouter-primary", "primary:free"),
+        ("openrouter-fallback", "fallback:free"),
+    ]
     get_settings.cache_clear()
 
     attempted_models: list[str] = []

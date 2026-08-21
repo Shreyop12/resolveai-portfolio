@@ -125,7 +125,7 @@ The key is never committed: `.env` is ignored by Git and the API reads it only a
 
 ## Draft Model Evaluation Lab
 
-Create a synthetic scenario and select one published source article. ResolveAI gives the exact same scenario and source packet to both the local Ollama writer and OpenRouter writer, then uses the local grounding reviewer to check both replies. Each result records provider, resolved model, latency, reviewer outcome, and an optional human quality score from 1 to 5. These lab records are intentionally separate from support tickets and can never be approved or sent to a customer.
+Create a synthetic scenario and select one published source article. ResolveAI gives the exact same scenario and source packet to two independently configured writers, then uses the configured grounding reviewer to check both replies. Local Docker compares Ollama with OpenRouter; the cloud deployment compares the configured OpenRouter primary and fallback models. Each result records provider, resolved model, latency, reviewer outcome, and an optional human quality score from 1 to 5. These lab records are intentionally separate from support tickets and can never be approved or sent to a customer.
 
 Clicking **Run both writers** now returns immediately with a durable job record. Redis is the short-lived work mailbox; PostgreSQL stores the job state permanently. The `worker` Docker service claims queued jobs, performs the slow writer/reviewer work, and saves `completed` or `failed`. If the worker restarts, unfinished jobs are re-queued from PostgreSQL. The page checks the saved job state every three seconds while work is active.
 
