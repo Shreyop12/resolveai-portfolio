@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -36,6 +36,18 @@ class Settings(BaseSettings):
     openrouter_api_key: SecretStr | None = None
     openrouter_draft_model: str = "openai/gpt-oss-20b:free"
     openrouter_fallback_draft_model: str | None = "z-ai/glm-5.2:free"
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def normalize_postgres_url_for_async_driver(cls, value: object) -> object:
+        """Accept managed-Postgres URLs while using SQLAlchemy's async driver."""
+        if not isinstance(value, str):
+            return value
+        if value.startswith("postgres://"):
+            return value.replace("postgres://", "postgresql+asyncpg://", 1)
+        if value.startswith("postgresql://"):
+            return value.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return value
 
     @property
     def cors_origin_list(self) -> list[str]:
