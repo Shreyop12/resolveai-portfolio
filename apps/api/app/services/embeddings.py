@@ -162,6 +162,7 @@ class OpenRouterChatClient:
         *,
         model_name: str | None = None,
         use_configured_fallback: bool = True,
+        timeout_seconds: float = 120,
     ) -> None:
         settings = get_settings()
         self.base_url = settings.openrouter_base_url.rstrip("/")
@@ -170,6 +171,7 @@ class OpenRouterChatClient:
         self.fallback_model_name = (
             settings.openrouter_fallback_draft_model if use_configured_fallback else None
         )
+        self.timeout_seconds = timeout_seconds
         self.api_key = (
             settings.openrouter_api_key.get_secret_value()
             if settings.openrouter_api_key is not None
@@ -257,7 +259,7 @@ class OpenRouterChatClient:
         }
         if "Return exactly one JSON object" in system:
             request_body["response_format"] = {"type": "json_object"}
-        async with httpx.AsyncClient(timeout=120) as client:
+        async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
             response = await client.post(
                 f"{self.base_url}/chat/completions",
                 headers={
@@ -287,7 +289,7 @@ class OpenRouterChatClient:
 def get_triage_chat_client() -> ChatClient:
     settings = get_settings()
     if settings.agent_provider == "openrouter":
-        return get_openrouter_draft_chat_client()
+        return OpenRouterChatClient(timeout_seconds=settings.openrouter_agent_timeout_seconds)
     return OllamaChatClient(
         settings.ollama_triage_model, settings.ollama_triage_max_output_tokens
     )
@@ -296,7 +298,7 @@ def get_triage_chat_client() -> ChatClient:
 def get_reviewer_chat_client() -> ChatClient:
     settings = get_settings()
     if settings.agent_provider == "openrouter":
-        return get_openrouter_draft_chat_client()
+        return OpenRouterChatClient(timeout_seconds=settings.openrouter_agent_timeout_seconds)
     return OllamaChatClient(
         settings.ollama_reviewer_model, settings.ollama_reviewer_max_output_tokens
     )

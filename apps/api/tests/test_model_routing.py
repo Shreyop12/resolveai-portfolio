@@ -34,11 +34,16 @@ def test_openrouter_can_run_all_live_support_agents(monkeypatch) -> None:
     monkeypatch.setenv("RESOLVEAI_DRAFT_PROVIDER", "openrouter")
     monkeypatch.setenv("RESOLVEAI_AGENT_PROVIDER", "openrouter")
     monkeypatch.setenv("RESOLVEAI_OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setenv("RESOLVEAI_OPENROUTER_AGENT_TIMEOUT_SECONDS", "15")
     get_settings.cache_clear()
 
     assert isinstance(get_draft_chat_client(), OpenRouterChatClient)
-    assert isinstance(get_triage_chat_client(), OpenRouterChatClient)
-    assert isinstance(get_reviewer_chat_client(), OpenRouterChatClient)
+    triage_client = get_triage_chat_client()
+    reviewer_client = get_reviewer_chat_client()
+    assert isinstance(triage_client, OpenRouterChatClient)
+    assert isinstance(reviewer_client, OpenRouterChatClient)
+    assert triage_client.timeout_seconds == 15
+    assert reviewer_client.timeout_seconds == 15
     get_settings.cache_clear()
 
 

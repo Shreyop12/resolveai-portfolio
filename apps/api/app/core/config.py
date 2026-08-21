@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     openrouter_api_key: SecretStr | None = None
     openrouter_draft_model: str = "openai/gpt-oss-20b:free"
     openrouter_fallback_draft_model: str | None = "nvidia/nemotron-nano-9b-v2:free"
+    openrouter_agent_timeout_seconds: int = Field(default=15, ge=5, le=60)
 
     @field_validator("database_url", mode="before")
     @classmethod
