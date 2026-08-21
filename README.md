@@ -119,12 +119,12 @@ For the recommended hosted configuration, Gemini is the primary provider for tri
 RESOLVEAI_DRAFT_PROVIDER=gemini
 RESOLVEAI_AGENT_PROVIDER=gemini
 RESOLVEAI_GEMINI_API_KEY=your_gemini_key_here
-RESOLVEAI_GEMINI_MODEL=gemini-3.5-flash
+RESOLVEAI_GEMINI_MODEL=gemini-3.5-flash-lite
 RESOLVEAI_OPENROUTER_API_KEY=your_openrouter_key_here
 RESOLVEAI_OPENROUTER_DRAFT_MODEL=openai/gpt-oss-20b:free
 ```
 
-The keys are never committed: `.env` is ignored by Git and the API reads them only at runtime. Triage and grounding review use schema-constrained JSON responses and still validate every result in application code. If Gemini fails, ResolveAI tries OpenRouter; if both hosted providers fail, the ticket fails closed to human review. Free tiers improve learning and demo resilience, but are rate-limited and are not an SLA for private production customer data. You can return to a fully local writer by setting both providers to `ollama`.
+The keys are never committed: `.env` is ignored by Git and the API reads them only at runtime. `gemini-3.5-flash-lite` is the default because this project has a 500-RPD free quota, compared with 20 RPD for the quality-first Flash model. Triage and grounding review use schema-constrained JSON responses and still validate every result in application code. If Gemini fails, ResolveAI tries OpenRouter; if both hosted providers fail, the ticket fails closed to human review. Free tiers improve learning and demo resilience, but are rate-limited and are not an SLA for private production customer data. You can return to a fully local writer by setting both providers to `ollama`.
 
 ## Draft Model Evaluation Lab
 

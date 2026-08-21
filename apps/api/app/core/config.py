@@ -39,7 +39,9 @@ class Settings(BaseSettings):
     openrouter_agent_timeout_seconds: int = Field(default=15, ge=5, le=60)
     gemini_base_url: str = "https://generativelanguage.googleapis.com/v1beta"
     gemini_api_key: SecretStr | None = None
-    gemini_model: str = "gemini-3.5-flash"
+    # Flash is quality-first but only has a 20 RPD free quota for this project.
+    # Flash-Lite is the safe hosted default for the multi-stage ticket workflow.
+    gemini_model: str = "gemini-3.5-flash-lite"
     gemini_timeout_seconds: int = Field(default=30, ge=5, le=120)
 
     @field_validator("database_url", mode="before")
