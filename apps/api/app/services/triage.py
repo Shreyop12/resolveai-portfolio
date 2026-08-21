@@ -1,4 +1,5 @@
 import json
+import logging
 import re
 import uuid
 from datetime import UTC, datetime
@@ -9,6 +10,8 @@ from app.models.ticket import SupportTicket
 from app.models.triage import TicketTriageAssessment, TriageCategory, TriageDecision
 from app.repositories.triage import TicketTriageRepository
 from app.services.embeddings import ChatClient, EmbeddingProviderError
+
+logger = logging.getLogger(__name__)
 
 
 class TriageResult(BaseModel):
@@ -70,7 +73,17 @@ class TicketTriageSpecialist:
             result = TriageResult.model_validate(json.loads(self._json_object(response))).model_copy(
                 update={"model": self.chat_client.model_name}
             )
-        except (EmbeddingProviderError, ValidationError, json.JSONDecodeError):
+        except EmbeddingProviderError as error:
+            logger.warning(
+                "Triage provider failed; using safe fallback. provider_error=%s",
+                error,
+            )
+            return self._safe_fallback()
+        except (ValidationError, json.JSONDecodeError) as error:
+            logger.warning(
+                "Triage response was invalid; using safe fallback. error_type=%s",
+                type(error).__name__,
+            )
             return self._safe_fallback()
         if result.decision == TriageDecision.DRAFT_ALLOWED and result.category in {
             TriageCategory.TROUBLESHOOTING,
