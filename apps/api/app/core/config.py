@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     openrouter_api_key: SecretStr | None = None
     openrouter_draft_model: str = "openai/gpt-oss-20b:free"
-    openrouter_fallback_draft_model: str | None = "z-ai/glm-5.2:free"
+    openrouter_fallback_draft_model: str | None = "nvidia/nemotron-nano-9b-v2:free"
 
     @field_validator("database_url", mode="before")
     @classmethod

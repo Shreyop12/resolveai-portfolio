@@ -56,6 +56,44 @@ def test_openrouter_refuses_to_run_without_a_key(monkeypatch) -> None:
     get_settings.cache_clear()
 
 
+def test_openrouter_requests_json_mode_for_structured_agent_prompts(monkeypatch) -> None:
+    monkeypatch.setenv("RESOLVEAI_OPENROUTER_API_KEY", "test-key")
+    get_settings.cache_clear()
+    request_bodies: list[dict[str, object]] = []
+
+    class FakeAsyncClient:
+        def __init__(self, **_: object) -> None:
+            pass
+
+        async def __aenter__(self) -> "FakeAsyncClient":
+            return self
+
+        async def __aexit__(self, *_: object) -> None:
+            return None
+
+        async def post(self, url: str, **kwargs: object) -> httpx.Response:
+            request_bodies.append(kwargs["json"])  # type: ignore[arg-type]
+            request = httpx.Request("POST", url)
+            return httpx.Response(
+                200,
+                request=request,
+                json={"choices": [{"message": {"content": '{"decision":"draft_allowed"}'}}]},
+            )
+
+    monkeypatch.setattr("app.services.embeddings.httpx.AsyncClient", FakeAsyncClient)
+    client = OpenRouterChatClient(use_configured_fallback=False)
+
+    asyncio.run(
+        client.complete(
+            system="Return exactly one JSON object, with no markdown.",
+            user="Synthetic triage request.",
+        )
+    )
+
+    assert request_bodies[0]["response_format"] == {"type": "json_object"}
+    get_settings.cache_clear()
+
+
 def test_openrouter_uses_the_fixed_fallback_after_a_transient_primary_failure(monkeypatch) -> None:
     monkeypatch.setenv("RESOLVEAI_OPENROUTER_API_KEY", "test-key")
     monkeypatch.setenv("RESOLVEAI_OPENROUTER_DRAFT_MODEL", "primary:free")

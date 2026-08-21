@@ -247,6 +247,16 @@ class OpenRouterChatClient:
         return "Attempts: " + "; ".join(descriptions)
 
     async def _complete_with_model(self, model: str, system: str, user: str) -> tuple[str, str]:
+        request_body: dict[str, object] = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            "stream": False,
+        }
+        if "Return exactly one JSON object" in system:
+            request_body["response_format"] = {"type": "json_object"}
         async with httpx.AsyncClient(timeout=120) as client:
             response = await client.post(
                 f"{self.base_url}/chat/completions",
@@ -255,14 +265,7 @@ class OpenRouterChatClient:
                     "HTTP-Referer": "http://localhost:3000",
                     "X-OpenRouter-Title": "ResolveAI",
                 },
-                json={
-                    "model": model,
-                    "messages": [
-                        {"role": "system", "content": system},
-                        {"role": "user", "content": user},
-                    ],
-                    "stream": False,
-                },
+                json=request_body,
             )
             response.raise_for_status()
         payload = response.json()
