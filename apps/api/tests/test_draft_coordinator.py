@@ -60,7 +60,7 @@ def test_coordinator_creates_source_backed_draft_for_human_review(client: TestCl
     assert runs.json()[0]["status"] == "completed"
     assert runs.json()[0]["source_article_ids"] == [article["article_id"]]
     assert runs.json()[0]["agent_models"] == {
-        "ticket_triage_specialist": "test-chat-model",
+            "ticket_triage_specialist": "deterministic-routine-rules",
         "hybrid_retrieval_embedding": "test-embedding-model",
         "grounded_draft_writer": "test-chat-model",
         "grounding_reviewer": "test-chat-model",

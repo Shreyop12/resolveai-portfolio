@@ -75,6 +75,31 @@ def test_data_deletion_language_uses_fast_deterministic_escalation(client: TestC
     assert assessment.json()["model"] == "deterministic-safety-rules"
 
 
+def test_routine_sso_troubleshooting_skips_the_model_and_allows_grounded_drafting(
+    client: TestClient,
+) -> None:
+    create_workspace(client)
+    ticket = client.post(
+        "/api/v1/workspaces/acme-support/tickets",
+        json={
+            "customer_name": "Jordan Lee",
+            "customer_email": "jordan@example.com",
+            "subject": "Company SSO access denied",
+            "message": "Our identity provider certificate changed and employees now receive access denied.",
+            "priority": "normal",
+        },
+    ).json()
+
+    assessment = client.post(
+        f"/api/v1/workspaces/acme-support/tickets/{ticket['ticket_id']}/triage"
+    )
+
+    assert assessment.status_code == 200
+    assert assessment.json()["decision"] == "draft_allowed"
+    assert assessment.json()["category"] == "troubleshooting"
+    assert assessment.json()["model"] == "deterministic-routine-rules"
+
+
 def test_a_new_assessment_replaces_the_visible_latest_decision(client: TestClient) -> None:
     create_workspace(client)
     ticket = create_ticket(client)
