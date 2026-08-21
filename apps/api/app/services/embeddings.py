@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import re
 from functools import lru_cache
 from typing import Literal, Protocol
@@ -9,6 +10,7 @@ from app.core.config import get_settings
 from app.models.embedding import EMBEDDING_DIMENSIONS
 from app.models.knowledge import KnowledgeArticle
 
+logger = logging.getLogger(__name__)
 
 class EmbeddingProviderError(RuntimeError):
     """Raised when the configured embedding model cannot produce a valid vector."""
@@ -324,28 +326,36 @@ class GeminiChatClient:
             }
 
         try:
-            async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
-                response = await client.post(
-                    f"{self.base_url}/models/{self.model_name}:generateContent",
-                    headers={"x-goog-api-key": self.api_key},
-                    json={
-                        "systemInstruction": {"parts": [{"text": system}]},
-                        "contents": [{"role": "user", "parts": [{"text": user}]}],
-                        "generationConfig": generation_config,
+            response = await self._generate(system, user, generation_config)
+        except httpx.HTTPStatusError as error:
+            if schema is None or error.response.status_code != 400:
+                self._record_http_failure(error)
+                raise EmbeddingProviderError(
+                    self._error_message(error.response.status_code)
+                ) from error
+            # GenerateContent accepts both representations while its structured
+            # output API is migrating. Retry the older form before falling back.
+            try:
+                response = await self._generate(
+                    system,
+                    user,
+                    {
+                        "temperature": 0.2,
+                        "responseMimeType": "application/json",
+                        "responseJsonSchema": schema,
                     },
                 )
-                response.raise_for_status()
+            except httpx.HTTPError as legacy_error:
+                self._record_http_failure(legacy_error)
+                status_code = (
+                    legacy_error.response.status_code
+                    if isinstance(legacy_error, httpx.HTTPStatusError)
+                    else None
+                )
+                raise EmbeddingProviderError(self._error_message(status_code)) from legacy_error
         except httpx.HTTPError as error:
-            status_code = error.response.status_code if isinstance(error, httpx.HTTPStatusError) else None
-            self.last_attempts = [
-                {
-                    "provider": "gemini",
-                    "model": self.model_name,
-                    "outcome": "rate_limited" if status_code == 429 else "request_failed",
-                    "status_code": status_code,
-                }
-            ]
-            raise EmbeddingProviderError(self._error_message(status_code)) from error
+            self._record_http_failure(error)
+            raise EmbeddingProviderError(self._error_message(None)) from error
 
         content = extract_customer_facing_content(self._response_text(response.json()))
         if len(content) < 20:
@@ -367,6 +377,33 @@ class GeminiChatClient:
             }
         ]
         return content
+
+    async def _generate(
+        self, system: str, user: str, generation_config: dict[str, object]
+    ) -> httpx.Response:
+        async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
+            response = await client.post(
+                f"{self.base_url}/models/{self.model_name}:generateContent",
+                headers={"x-goog-api-key": self.api_key},
+                json={
+                    "systemInstruction": {"parts": [{"text": system}]},
+                    "contents": [{"role": "user", "parts": [{"text": user}]}],
+                    "generationConfig": generation_config,
+                },
+            )
+            response.raise_for_status()
+            return response
+
+    def _record_http_failure(self, error: httpx.HTTPError) -> None:
+        status_code = error.response.status_code if isinstance(error, httpx.HTTPStatusError) else None
+        self.last_attempts = [
+            {
+                "provider": "gemini",
+                "model": self.model_name,
+                "outcome": "rate_limited" if status_code == 429 else "request_failed",
+                "status_code": status_code,
+            }
+        ]
 
     def _structured_schema(self) -> dict[str, object] | None:
         if self.structured_output == "triage":
@@ -448,6 +485,11 @@ class FallbackChatClient:
             return content
         except EmbeddingProviderError as primary_error:
             primary_attempts = list(getattr(self.primary, "last_attempts", []))
+            logger.warning(
+                "Hosted primary failed; attempting fallback. primary_model=%s attempts=%s",
+                self.primary.model_name,
+                primary_attempts,
+            )
             try:
                 content = await self.fallback.complete(system=system, user=user)
             except EmbeddingProviderError as fallback_error:

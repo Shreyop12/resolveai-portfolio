@@ -177,6 +177,57 @@ def test_gemini_requests_schema_constrained_json_for_triage(monkeypatch) -> None
     get_settings.cache_clear()
 
 
+def test_gemini_retries_legacy_schema_format_before_using_provider_fallback(monkeypatch) -> None:
+    monkeypatch.setenv("RESOLVEAI_GEMINI_API_KEY", "gemini-test-key")
+    get_settings.cache_clear()
+    request_bodies: list[dict[str, object]] = []
+
+    class FakeAsyncClient:
+        def __init__(self, **_: object) -> None:
+            pass
+
+        async def __aenter__(self) -> "FakeAsyncClient":
+            return self
+
+        async def __aexit__(self, *_: object) -> None:
+            return None
+
+        async def post(self, url: str, **kwargs: object) -> httpx.Response:
+            request_bodies.append(kwargs["json"])  # type: ignore[arg-type]
+            request = httpx.Request("POST", url)
+            if len(request_bodies) == 1:
+                return httpx.Response(400, request=request, json={"error": {"message": "format"}})
+            return httpx.Response(
+                200,
+                request=request,
+                json={
+                    "candidates": [
+                        {
+                            "content": {
+                                "parts": [
+                                    {
+                                        "text": '{"decision":"draft_allowed","category":"troubleshooting","reason":"Routine issue."}'
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                },
+            )
+
+    monkeypatch.setattr("app.services.embeddings.httpx.AsyncClient", FakeAsyncClient)
+
+    content = asyncio.run(
+        GeminiChatClient(structured_output="triage").complete(system="system", user="user")
+    )
+
+    assert '"decision":"draft_allowed"' in content
+    assert "responseFormat" in request_bodies[0]["generationConfig"]  # type: ignore[index]
+    assert request_bodies[1]["generationConfig"]["responseMimeType"] == "application/json"  # type: ignore[index]
+    assert "responseJsonSchema" in request_bodies[1]["generationConfig"]  # type: ignore[index]
+    get_settings.cache_clear()
+
+
 def test_gemini_failure_uses_openrouter_fallback(monkeypatch) -> None:
     monkeypatch.setenv("RESOLVEAI_DRAFT_PROVIDER", "gemini")
     monkeypatch.setenv("RESOLVEAI_GEMINI_API_KEY", "gemini-test-key")
